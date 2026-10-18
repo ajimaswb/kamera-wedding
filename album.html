@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Album Pernikahan</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Jost:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 0 0 18px; }
+  .stats { display: flex; gap: 22px; }
+  .stat b { display: block; font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; font-weight: 500; line-height: 1; color: var(--gold); }
+  .stat span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  select {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--card);
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; max-width: 100%;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .tile { position: relative; border-radius: 10px; overflow: hidden; background: var(--line); aspect-ratio: 1; cursor: zoom-in; border: 0; padding: 0; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .by {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; font-size: 12px; text-align: left;
+    color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.55));
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .lb { position: fixed; inset: 0; background: rgba(15,13,11,.94); display: flex; flex-direction: column; z-index: 10; }
+  .lb-img { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 12px; }
+  .lb-img img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+  .lb-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); color: #f1ebe2; flex-wrap: wrap; }
+  .lb-bar .btn.ghost { color: #f1ebe2; border-color: rgba(255,255,255,.25); }
+  .lb-bar .btn.danger { background: transparent; color: #e08a72; border: 1px solid rgba(224,138,114,.5); }
+  .lb-nav { display: flex; gap: 8px; }
+  .empty { padding: 60px 16px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="wrap wide">
+  <p class="eyebrow">Album Pernikahan</p>
+  <h1 class="names" id="names"></h1>
+  <div class="divider"></div>
+
+  <!-- Login -->
+  <section id="login" class="card hidden" style="max-width:420px;margin:0 auto">
+    <p style="margin-top:0" class="center">Halaman ini khusus untuk kami berdua. Masuk dengan email yang terdaftar — link login akan dikirim ke email.</p>
+    <form id="login-form">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" required>
+      <p class="err" id="login-err"></p>
+      <button class="btn" id="login-btn" type="submit">Kirim link login</button>
+    </form>
+    <p class="muted center hidden" id="login-sent" style="margin-bottom:0">Cek email kamu dan buka link login dari perangkat ini.</p>
+  </section>
+
+  <!-- Bukan admin -->
+  <section id="denied" class="card hidden center" style="max-width:420px;margin:0 auto">
+    <p style="margin-top:0">Email <b id="denied-email"></b> tidak punya akses ke album ini.</p>
+    <button class="btn ghost" id="logout2" type="button">Keluar</button>
+  </section>
+
+  <!-- Album -->
+  <section id="album" class="hidden">
+    <div class="bar">
+      <div class="stats">
+        <div class="stat"><b id="s-photos">0</b><span>Foto</span></div>
+        <div class="stat"><b id="s-guests">0</b><span>Tamu</span></div>
+      </div>
+      <div class="actions">
+        <select id="filter" aria-label="Filter tamu"><option value="">Semua tamu</option></select>
+        <button class="btn small ghost" id="refresh" type="button">Muat ulang</button>
+        <button class="btn small" id="zip" type="button">Unduh semua (.zip)</button>
+        <button class="btn small ghost" id="logout" type="button">Keluar</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="empty hidden" id="empty">Belum ada foto. Foto dari tamu akan muncul di sini.</div>
+  </section>
+</main>
+
+<div class="lb hidden" id="lb">
+  <div class="lb-img" id="lb-img-wrap"><img id="lb-img" alt=""></div>
+  <div class="lb-bar">
+    <span id="lb-cap"></span>
+    <div class="lb-nav">
+      <button class="btn small ghost" id="lb-prev" type="button">‹</button>
+      <button class="btn small ghost" id="lb-next" type="button">›</button>
+      <a class="btn small ghost" id="lb-dl" download>Unduh</a>
+      <button class="btn small danger" id="lb-del" type="button">Hapus</button>
+      <button class="btn small ghost" id="lb-close" type="button">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="config.js"></script>
+<script>
+const C = window.WEDDING;
+const sb = supabase.createClient(C.supabaseUrl, C.supabaseKey);
+const $ = (id) => document.getElementById(id);
+const [n1, n2] = C.couple.split("&").map(s => s.trim());
+$("names").innerHTML = `${n1} <span class="amp">&amp;</span> ${n2}`;
+
+let photos = [];   // { id, path, created_at, guest_id, name, url }
+let view = [];
+let idx = -1;
+
+function show(id) { for (const s of ["login", "denied", "album"]) $(s).classList.toggle("hidden", s !== id); }
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (d) => new Date(d).toLocaleString("id-ID", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" });
+
+async function route() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return show("login");
+  const { data: ok } = await sb.rpc("is_admin");
+  if (!ok) { $("denied-email").textContent = session.user.email; return show("denied"); }
+  show("album");
+  load();
+}
+
+async function load() {
+  $("refresh").disabled = true;
+  const [{ data: ph, error: e1 }, { data: gs, error: e2 }] = await Promise.all([
+    sb.from("photos").select("id, path, created_at, guest_id").order("created_at", { ascending: false }),
+    sb.from("guests").select("id, name"),
+  ]);
+  $("refresh").disabled = false;
+  if (e1 || e2) { alert("Gagal memuat album: " + (e1 || e2).message); return; }
+  const names = Object.fromEntries(gs.map(g => [g.id, g.name]));
+  const urls = {};
+  for (let i = 0; i < ph.length; i += 100) {
+    const chunk = ph.slice(i, i + 100).map(p => p.path);
+    const { data } = await sb.storage.from(C.bucket).createSignedUrls(chunk, 60 * 60 * 6);
+    (data || []).forEach(d => { if (d.signedUrl) urls[d.path] = d.signedUrl; });
+  }
+  photos = ph.map(p => ({ ...p, name: names[p.guest_id] || "Tamu", url: urls[p.path] }));
+  const guestIds = [...new Set(photos.map(p => p.guest_id))];
+  $("s-photos").textContent = photos.length;
+  $("s-guests").textContent = guestIds.length;
+  const sel = $("filter"), cur = sel.value;
+  const counts = {}; photos.forEach(p => counts[p.guest_id] = (counts[p.guest_id] || 0) + 1);
+  sel.innerHTML = `<option value="">Semua tamu</option>` + guestIds
+    .map(id => ({ id, name: names[id] || "Tamu" }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(g => `<option value="${g.id}">${esc(g.name)} (${counts[g.id]})</option>`).join("");
+  sel.value = guestIds.includes(cur) ? cur : "";
+  draw();
+}
+
+function draw() {
+  const f = $("filter").value;
+  view = photos.filter(p => !f || p.guest_id === f);
+  $("empty").classList.toggle("hidden", view.length > 0);
+  $("grid").innerHTML = view.map((p, i) =>
+    `<button class="tile" data-i="${i}" type="button"><img loading="lazy" src="${p.url || ""}" alt="Foto dari ${esc(p.name)}"><span class="by">${esc(p.name)}</span></button>`
+  ).join("");
+}
+
+function open(i) {
+  idx = (i + view.length) % view.length;
+  const p = view[idx];
+  $("lb-img").src = p.url;
+  $("lb-cap").textContent = `${p.name} · ${fmt(p.created_at)} · ${idx + 1}/${view.length}`;
+  $("lb-dl").href = p.url + (p.url.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(fileName(p));
+  $("lb").classList.remove("hidden");
+}
+function close() { $("lb").classList.add("hidden"); $("lb-img").src = ""; idx = -1; }
+function fileName(p) {
+  const safe = p.name.replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/\s+/g, "_") || "Tamu";
+  return `${safe}_${p.path.split("/").pop()}`;
+}
+
+$("grid").addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) open(+t.dataset.i); });
+$("lb-prev").onclick = () => open(idx - 1);
+$("lb-next").onclick = () => open(idx + 1);
+$("lb-close").onclick = close;
+$("lb-img-wrap").addEventListener("click", (e) => { if (e.target.id === "lb-img-wrap") close(); });
+document.addEventListener("keydown", (e) => {
+  if (idx < 0) return;
+  if (e.key === "Escape") close();
+  if (e.key === "ArrowLeft") open(idx - 1);
+  if (e.key === "ArrowRight") open(idx + 1);
+});
+$("lb-del").onclick = async () => {
+  const p = view[idx];
+  if (!confirm(`Hapus foto dari ${p.name}? Tidak bisa dibatalkan.`)) return;
+  const s = await sb.storage.from(C.bucket).remove([p.path]);
+  const d = await sb.from("photos").delete().eq("id", p.id);
+  if (s.error || d.error) return alert("Gagal menghapus.");
+  close(); load();
+};
+$("filter").onchange = draw;
+$("refresh").onclick = load;
+
+$("zip").onclick = async () => {
+  const btn = $("zip"), list = view.slice();
+  if (!list.length) return;
+  btn.disabled = true;
+  const zip = new JSZip();
+  let done = 0;
+  const queue = list.slice();
+  async function worker() {
+    while (queue.length) {
+      const p = queue.shift();
+      try {
+        const r = await fetch(p.url);
+        if (r.ok) zip.folder(p.name.replace(/[\/\\:*?"<>|]/g, "_")).file(p.path.split("/").pop(), await r.blob());
+      } catch {}
+      btn.textContent = `Mengunduh ${++done}/${list.length}…`;
+    }
+  }
+  await Promise.all(Array.from({ length: 4 }, worker));
+  btn.textContent = "Membuat zip…";
+  const blob = await zip.generateAsync({ type: "blob" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "Album_Khairunnisa_Ajimas.zip";
+  a.click();
+  btn.disabled = false; btn.textContent = "Unduh semua (.zip)";
+};
+
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("login-btn").disabled = true; $("login-err").textContent = "";
+  const { error } = await sb.auth.signInWithOtp({
+    email: $("email").value.trim(),
+    options: { emailRedirectTo: location.origin + location.pathname },
+  });
+  $("login-btn").disabled = false;
+  if (error) { $("login-err").textContent = error.message; return; }
+  $("login-form").classList.add("hidden"); $("login-sent").classList.remove("hidden");
+});
+async function logout() { await sb.auth.signOut(); show("login"); }
+$("logout").onclick = logout; $("logout2").onclick = logout;
+
+sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_IN") route(); });
+route();
+setInterval(() => { if (!$("album").classList.contains("hidden") && idx < 0) load(); }, 60000);
+</script>
+</body>
+</html>

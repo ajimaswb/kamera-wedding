@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kartu QR Meja</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Jost:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .tools { max-width: 520px; margin: 0 auto 24px; }
+  .tools .row { display: flex; gap: 8px; margin-top: 10px; }
+  .sheet { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+  .tcard {
+    width: 100%; max-width: 360px; background: #fffdf9; color: #2f2a24; border: 1px solid #e6dccd;
+    border-radius: 6px; padding: 32px 26px; text-align: center;
+  }
+  .tcard .eyebrow { color: #8a7f72; }
+  .tcard h1.names { font-size: 40px; }
+  .tcard h1.names .amp { color: #b8955a; }
+  .tcard .divider { background: #b8955a; margin: 16px auto; }
+  .tcard .qr { display: inline-block; padding: 12px; background: #fff; border: 1px solid #e6dccd; border-radius: 8px; }
+  .tcard .qr img, .tcard .qr canvas { display: block; width: 180px; height: 180px; }
+  .tcard .lead { font-family: "Cormorant Garamond", Georgia, serif; font-size: 22px; margin: 14px 0 4px; }
+  .tcard .small { font-size: 13px; color: #8a7f72; margin: 0; }
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    body { background: #fff; }
+    .tools { display: none; }
+    .wrap { padding: 0; max-width: none; }
+    .sheet { gap: 8mm; }
+    .tcard { width: 88mm; max-width: none; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap wide">
+  <section class="tools card">
+    <label for="url">Link halaman kamera tamu</label>
+    <input id="url" type="text">
+    <div class="row">
+      <button class="btn" id="print" type="button">Cetak (4 kartu / A4)</button>
+      <a class="btn ghost" id="png" download="qr-kamera-tamu.png">Unduh QR (.png)</a>
+    </div>
+  </section>
+  <div class="sheet" id="sheet"></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
+<script>
+const C = window.WEDDING;
+const [n1, n2] = C.couple.split("&").map(s => s.trim());
+const urlEl = document.getElementById("url");
+urlEl.value = new URL("./", location.href).href;
+
+function card() {
+  return `<div class="tcard">
+    <p class="eyebrow">The Wedding of</p>
+    <h1 class="names">${n1} <span class="amp">&amp;</span> ${n2}</h1>
+    ${C.date ? `<p class="small">${C.date}</p>` : ""}
+    <div class="divider"></div>
+    <div class="qr"></div>
+    <p class="lead">Jadilah fotografer kami!</p>
+    <p class="small">Scan QR ini dengan kamera HP. Kamu punya ${C.maxPhotos} jepretan<br>untuk mengabadikan hari bahagia kami dari sudut pandangmu.</p>
+  </div>`;
+}
+function draw() {
+  const sheet = document.getElementById("sheet");
+  sheet.innerHTML = card().repeat(4);
+  sheet.querySelectorAll(".qr").forEach(el =>
+    new QRCode(el, { text: urlEl.value.trim(), width: 720, height: 720, colorDark: "#2f2a24", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M }));
+  setTimeout(() => {
+    const c = sheet.querySelector(".qr canvas");
+    if (c) document.getElementById("png").href = c.toDataURL("image/png");
+  }, 50);
+}
+urlEl.addEventListener("input", draw);
+document.getElementById("print").onclick = () => window.print();
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kamera Tamu</title>
+<meta name="theme-color" content="#f7f2ea">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Jost:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .film { display: flex; justify-content: center; gap: 6px; margin: 18px 0 6px; flex-wrap: wrap; }
+  .film span {
+    width: 22px; height: 30px; border-radius: 4px; border: 1.5px solid var(--gold);
+    background: transparent; transition: background .3s;
+  }
+  .film span.used { background: var(--gold); opacity: .85; }
+  .left { font-family: "Cormorant Garamond", Georgia, serif; font-size: 22px; text-align: center; margin: 4px 0 22px; }
+  .left b { font-size: 34px; font-weight: 500; color: var(--gold); }
+  .shutter {
+    display: block; margin: 0 auto; width: 128px; height: 128px; border-radius: 50%;
+    border: 6px solid var(--card); outline: 2px solid var(--gold);
+    background: var(--accent); color: var(--accent-ink); cursor: pointer;
+    font: inherit; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; font-size: 13px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.12);
+  }
+  .shutter:active { transform: scale(.96); }
+  .shutter:disabled { opacity: .5; }
+  .preview { margin-top: 18px; }
+  .preview img { width: 100%; border-radius: 14px; display: block; max-height: 60vh; object-fit: contain; background: var(--line); }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  .thumbs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 26px; }
+  .thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px;
+    font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: calc(100% - 32px);
+  }
+  .toast.show { opacity: 1; }
+  .done-title { font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; text-align: center; margin: 8px 0; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">The Wedding of</p>
+  <h1 class="names" id="names"></h1>
+  <p class="date" id="date"></p>
+  <div class="divider"></div>
+
+  <!-- Langkah 1: nama -->
+  <section id="step-name" class="card hidden">
+    <p class="center" style="margin-top:0">Abadikan momen kami dari sudut pandangmu. Kamu punya <b>10 jepretan</b> — seperti kamera film. Pilih momen terbaik!</p>
+    <form id="name-form">
+      <label for="name">Nama kamu</label>
+      <input id="name" type="text" maxlength="60" autocomplete="name" placeholder="cth. Budi & keluarga" required>
+      <p class="err" id="name-err"></p>
+      <button class="btn" type="submit" id="name-btn">Mulai memotret</button>
+    </form>
+  </section>
+
+  <!-- Langkah 2: kamera -->
+  <section id="step-cam" class="hidden">
+    <p class="center muted" style="margin:0">Hai, <span id="hello"></span></p>
+    <div class="film" id="film"></div>
+    <p class="left"><b id="left-n">10</b> jepretan tersisa</p>
+
+    <input id="file" type="file" accept="image/*" capture="environment" class="hidden">
+    <button class="shutter" id="shutter" type="button">Jepret</button>
+
+    <div class="preview hidden" id="preview">
+      <img id="preview-img" alt="Pratinjau foto">
+      <div class="row">
+        <button class="btn ghost" id="retake" type="button">Ulangi</button>
+        <button class="btn" id="send" type="button">Kirim foto</button>
+      </div>
+    </div>
+
+    <p class="muted center" id="queue-msg" style="font-size:14px;margin:14px 0 0"></p>
+    <div class="thumbs" id="thumbs"></div>
+  </section>
+
+  <!-- Langkah 3: selesai -->
+  <section id="step-done" class="card hidden center">
+    <p class="done-title">Terima kasih! 🤍</p>
+    <p class="muted" style="margin:0">Semua 10 jepretanmu sudah kami terima dan akan jadi bagian dari album pernikahan kami.</p>
+    <p class="muted center" id="queue-msg-done" style="font-size:14px;margin:14px 0 0"></p>
+    <div class="thumbs" id="thumbs-done"></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+const C = window.WEDDING;
+const sb = supabase.createClient(C.supabaseUrl, C.supabaseKey, { auth: { persistSession: false } });
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+const [n1, n2] = C.couple.split("&").map(s => s.trim());
+$("names").innerHTML = `${n1} <span class="amp">&amp;</span> ${n2}`;
+$("date").textContent = C.date || "";
+
+let guestId = store.get("wg_id");
+let sent = 0;          // foto yang sudah tercatat di server
+let queue = [];        // foto yang menunggu terkirim (disimpan di HP)
+let pendingBlob = null;
+const used = () => sent + queue.length;
+
+// --- IndexedDB: foto tetap tersimpan di HP sampai terkirim, walau halaman ditutup ---
+const idb = (() => {
+  let dbp;
+  const open = () => dbp ||= new Promise((res, rej) => {
+    const r = indexedDB.open("wedding-cam", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("queue", { keyPath: "id" });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const tx = async (mode, fn) => {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const t = db.transaction("queue", mode); const st = t.objectStore("queue");
+      const req = fn(st); t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error);
+    });
+  };
+  return {
+    all: () => tx("readonly", st => st.getAll()).catch(() => []),
+    put: (v) => tx("readwrite", st => st.put(v)).catch(() => {}),
+    del: (id) => tx("readwrite", st => st.delete(id)).catch(() => {}),
+  };
+})();
+
+function uuid() {
+  return crypto.randomUUID ? crypto.randomUUID() :
+    "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2600);
+}
+function show(step) {
+  for (const s of ["step-name", "step-cam", "step-done"]) $(s).classList.toggle("hidden", s !== step);
+}
+function thumbs() {
+  try { return JSON.parse(store.get("wg_thumbs") || "[]"); } catch { return []; }
+}
+function renderThumbs() {
+  const waiting = new Set(queue.map(q => q.id));
+  const html = thumbs().map(t => typeof t === "string" ? { src: t } : t)
+    .map(t => `<img src="${t.src}" alt="" style="${waiting.has(t.id) ? "opacity:.45" : ""}">`).join("");
+  $("thumbs").innerHTML = html; $("thumbs-done").innerHTML = html;
+}
+function render() {
+  const left = Math.max(0, C.maxPhotos - used());
+  $("film").innerHTML = Array.from({ length: C.maxPhotos }, (_, i) =>
+    `<span class="${i < used() ? "used" : ""}"></span>`).join("");
+  $("left-n").textContent = left;
+  const q = queue.length;
+  $("queue-msg").textContent = q ? `${q} foto menunggu terkirim — akan dikirim otomatis saat sinyal kembali` : "";
+  $("queue-msg-done").textContent = $("queue-msg").textContent;
+  renderThumbs();
+  if (left === 0) show("step-done"); else show("step-cam");
+}
+
+async function init() {
+  if (!guestId) return show("step-name");
+  queue = (await idb.all()).filter(q => q.guestId === guestId);
+  const { data, error } = await sb.rpc("guest_status", { gid: guestId });
+  if (error) {
+    // Offline: pakai data terakhir yang diingat HP
+    $("hello").textContent = store.get("wg_name") || "";
+    sent = +(store.get("wg_sent") || 0);
+    render(); return;
+  }
+  if (!data || !data.name) { guestId = null; return show("step-name"); }
+  $("hello").textContent = data.name; store.set("wg_name", data.name);
+  sent = data.count;
+  render();
+  flush();
+}
+
+$("name-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("name").value.trim();
+  if (!name) return;
+  $("name-btn").disabled = true; $("name-err").textContent = "";
+  const id = uuid();
+  const { error } = await sb.from("guests").insert({ id, name });
+  $("name-btn").disabled = false;
+  if (error) { $("name-err").textContent = "Gagal menyimpan. Cek koneksi internet lalu coba lagi."; return; }
+  guestId = id; store.set("wg_id", id); store.set("wg_name", name); store.set("wg_sent", "0");
+  store.set("wg_thumbs", "[]");
+  $("hello").textContent = name;
+  sent = 0; render();
+});
+
+$("shutter").addEventListener("click", () => $("file").click());
+$("retake").addEventListener("click", () => { $("preview").classList.add("hidden"); $("shutter").classList.remove("hidden"); pendingBlob = null; $("file").click(); });
+
+$("file").addEventListener("change", async () => {
+  const f = $("file").files[0];
+  $("file").value = "";
+  if (!f) return;
+  pendingBlob = await compress(f).catch(() => f);
+  $("preview-img").src = URL.createObjectURL(pendingBlob);
+  $("preview").classList.remove("hidden");
+  $("shutter").classList.add("hidden");
+  $("preview").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+// Kirim = masukkan ke antrian; antrian dikirim di latar belakang dengan percobaan ulang
+$("send").addEventListener("click", async () => {
+  if (!pendingBlob || used() >= C.maxPhotos) return;
+  const blob = pendingBlob; pendingBlob = null;
+  const id = uuid();
+  const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+  const item = { id, guestId, blob, type: blob.type || "image/jpeg", path: `${guestId}/${Date.now()}-${id.slice(0, 8)}.${ext}`, uploaded: false };
+  queue.push(item);
+  await idb.put(item);
+  const t = thumbs(); t.push({ id, src: await thumb(blob).catch(() => "") }); store.set("wg_thumbs", JSON.stringify(t));
+  $("preview").classList.add("hidden"); $("shutter").classList.remove("hidden");
+  render();
+  toast(navigator.onLine ? "Mengirim foto…" : "Tersimpan — akan dikirim saat ada sinyal");
+  flush();
+});
+
+let flushing = false, retryTimer = null, delay = 3000;
+async function flush() {
+  if (flushing || !queue.length) return;
+  flushing = true; clearTimeout(retryTimer);
+  let failed = false;
+  while (queue.length) {
+    const item = queue[0];
+    try {
+      if (!item.uploaded) {
+        const up = await sb.storage.from(C.bucket).upload(item.path, item.blob, { contentType: item.type, upsert: false });
+        // "Duplicate" berarti upload sebelumnya sebenarnya sudah masuk
+        if (up.error && !/exists|duplicate/i.test(up.error.message)) throw up.error;
+        item.uploaded = true; await idb.put(item);
+      }
+      const ins = await sb.from("photos").insert({ guest_id: item.guestId, path: item.path });
+      if (ins.error && ins.error.code !== "23505") throw ins.error;
+      queue.shift(); await idb.del(item.id);
+      sent += 1; store.set("wg_sent", String(sent));
+      render();
+      toast(used() >= C.maxPhotos && !queue.length ? "Jepretan terakhir terkirim! 🤍" : "Foto terkirim 🤍");
+    } catch (err) {
+      const msg = String(err && (err.message || err.error) || "");
+      if (/LIMIT|row-level security|policy/i.test(msg)) {
+        // Jatah sudah habis di server: buang sisa antrian
+        for (const q of queue) await idb.del(q.id);
+        queue = [];
+        const { data } = await sb.rpc("guest_status", { gid: guestId });
+        if (data) { sent = data.count; store.set("wg_sent", String(sent)); }
+        render(); toast("Jatah 10 jepretanmu sudah habis.");
+      } else {
+        failed = true;
+      }
+      break;
+    }
+  }
+  flushing = false;
+  if (failed) { retryTimer = setTimeout(flush, delay); delay = Math.min(delay * 2, 60000); }
+  else delay = 3000;
+}
+window.addEventListener("online", () => { delay = 3000; flush(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) flush(); });
+
+function loadImg(blob) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img); img.onerror = rej;
+    img.src = URL.createObjectURL(blob);
+  });
+}
+async function resize(blob, max, quality) {
+  const img = await loadImg(blob);
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(img, 0, 0, w, h);
+  return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(), "image/jpeg", quality));
+}
+// Resolusi tetap tinggi untuk album (maks 3000px), tapi ukuran file jauh lebih kecil untuk upload cepat
+const compress = (f) => resize(f, 3000, 0.9);
+async function thumb(blob) {
+  const b = await resize(blob, 200, 0.6);
+  return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
+}
+
+init();
+</script>
+</body>
+</html>
