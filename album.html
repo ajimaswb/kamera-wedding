@@ -22,6 +22,7 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
   .tile { position: relative; border-radius: 10px; overflow: hidden; background: var(--line); aspect-ratio: 1; cursor: zoom-in; border: 0; padding: 0; }
   .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .noir .tile img { filter: grayscale(1) contrast(1.45); }
   .tile .by {
     position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; font-size: 12px; text-align: left;
     color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.55));
@@ -88,6 +89,7 @@
         <div class="stat"><b id="s-guests">0</b><span>Tamu</span></div>
       </div>
       <div class="actions">
+        <select id="look" aria-label="Tampilan foto"><option value="noir">Noir (Tri-X)</option><option value="color">Warna asli</option></select>
         <select id="filter" aria-label="Filter tamu"><option value="">Semua tamu</option></select>
         <button class="btn small ghost" id="refresh" type="button">Muat ulang</button>
         <button class="btn small" id="zip" type="button">Unduh semua (.zip)</button>
@@ -107,7 +109,7 @@
     <div class="lb-nav">
       <button class="btn small ghost" id="lb-prev" type="button">‹</button>
       <button class="btn small ghost" id="lb-next" type="button">›</button>
-      <a class="btn small ghost" id="lb-dl" download>Unduh</a>
+      <button class="btn small ghost" id="lb-dl" type="button">Unduh</button>
       <button class="btn small danger" id="lb-del" type="button">Hapus</button>
       <button class="btn small ghost" id="lb-close" type="button">Tutup</button>
     </div>
@@ -117,6 +119,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="config.js"></script>
+<script src="filter.js?v=1"></script>
 <script>
 const C = window.WEDDING;
 const sb = supabase.createClient(C.supabaseUrl, C.supabaseKey);
@@ -179,15 +182,37 @@ function draw() {
   ).join("");
 }
 
-function open(i) {
-  idx = (i + view.length) % view.length;
-  const p = view[idx];
-  $("lb-img").src = p.url;
-  $("lb-cap").textContent = `${p.name} · ${fmt(p.created_at)} · ${idx + 1}/${view.length}`;
-  $("lb-dl").href = p.url + (p.url.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(fileName(p));
-  $("lb").classList.remove("hidden");
+const isNoir = () => $("look").value === "noir";
+const noirCache = new Map();
+async function noirUrl(p) {
+  if (!noirCache.has(p.path)) {
+    noirCache.set(p.path, Noir.loadImage(p.url).then(img => Noir.toBlob(Noir.render(img), 0.9)).then(b => URL.createObjectURL(b)));
+  }
+  return noirCache.get(p.path);
 }
-function close() { $("lb").classList.add("hidden"); $("lb-img").src = ""; idx = -1; }
+async function open(i) {
+  idx = (i + view.length) % view.length;
+  const p = view[idx], my = idx;
+  $("lb-cap").textContent = `${p.name} · ${fmt(p.created_at)} · ${idx + 1}/${view.length}`;
+  $("lb").classList.remove("hidden");
+  if (!isNoir()) { $("lb-img").src = p.url; return; }
+  $("lb-img").src = "";
+  $("lb-img").style.filter = "grayscale(1) contrast(1.45)";
+  $("lb-img").src = p.url;
+  try {
+    const u = await noirUrl(p);
+    if (idx === my) { $("lb-img").style.filter = ""; $("lb-img").src = u; }
+  } catch {}
+}
+function download(url, name) {
+  const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+$("lb-dl").onclick = async () => {
+  const p = view[idx];
+  if (isNoir()) download(await noirUrl(p), fileName(p));
+  else download(p.url + (p.url.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(fileName(p)), fileName(p));
+};
+function close() { $("lb").classList.add("hidden"); $("lb-img").src = ""; $("lb-img").style.filter = ""; idx = -1; }
 function fileName(p) {
   const safe = p.name.replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/\s+/g, "_") || "Tamu";
   return `${safe}_${p.path.split("/").pop()}`;
@@ -213,10 +238,13 @@ $("lb-del").onclick = async () => {
   close(); load();
 };
 $("filter").onchange = draw;
+try { const v = localStorage.getItem("album_look"); if (v) $("look").value = v; } catch {}
+const applyLook = () => { $("grid").classList.toggle("noir", isNoir()); try { localStorage.setItem("album_look", $("look").value); } catch {} };
+$("look").onchange = applyLook; applyLook();
 $("refresh").onclick = load;
 
 $("zip").onclick = async () => {
-  const btn = $("zip"), list = view.slice();
+  const btn = $("zip"), list = view.slice(), noir = isNoir();
   if (!list.length) return;
   btn.disabled = true;
   const zip = new JSZip();
@@ -227,7 +255,11 @@ $("zip").onclick = async () => {
       const p = queue.shift();
       try {
         const r = await fetch(p.url);
-        if (r.ok) zip.folder(p.name.replace(/[\/\\:*?"<>|]/g, "_")).file(p.path.split("/").pop(), await r.blob());
+        if (r.ok) {
+          let blob = await r.blob();
+          if (noir) blob = await Noir.toBlob(Noir.render(await Noir.loadImage(blob)), 0.9);
+          zip.folder(p.name.replace(/[\/\\:*?"<>|]/g, "_")).file(p.path.split("/").pop().replace(/\.\w+$/, ".jpg"), blob);
+        }
       } catch {}
       btn.textContent = `Mengunduh ${++done}/${list.length}…`;
     }

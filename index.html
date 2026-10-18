@@ -94,6 +94,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="filter.js?v=1"></script>
 <script>
 const C = window.WEDDING;
 const sb = supabase.createClient(C.supabaseUrl, C.supabaseKey, { auth: { persistSession: false } });
@@ -218,7 +219,11 @@ $("file").addEventListener("change", async () => {
   $("file").value = "";
   if (!f) return;
   pendingBlob = await compress(f).catch(() => f);
-  $("preview-img").src = URL.createObjectURL(pendingBlob);
+  // Pratinjau dengan filter Noir (yang diunggah tetap foto asli berwarna)
+  try {
+    const cv = Noir.render(await Noir.loadImage(pendingBlob), 1200);
+    $("preview-img").src = URL.createObjectURL(await Noir.toBlob(cv, 0.85));
+  } catch { $("preview-img").src = URL.createObjectURL(pendingBlob); }
   $("preview").classList.remove("hidden");
   $("shutter").classList.add("hidden");
   $("preview").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -297,10 +302,10 @@ async function resize(blob, max, quality) {
   c.getContext("2d").drawImage(img, 0, 0, w, h);
   return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(), "image/jpeg", quality));
 }
-// Resolusi tetap tinggi untuk album (maks 3000px), tapi ukuran file jauh lebih kecil untuk upload cepat
-const compress = (f) => resize(f, 3000, 0.9);
+// Hemat storage: maks 2048px, JPEG 82% (~0,5–0,9 MB per foto) — tetap tajam untuk album & cetak 4R/5R
+const compress = (f) => resize(f, 2048, 0.82);
 async function thumb(blob) {
-  const b = await resize(blob, 200, 0.6);
+  const b = await Noir.toBlob(Noir.render(await Noir.loadImage(blob), 200), 0.6);
   return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
 }
 

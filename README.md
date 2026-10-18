@@ -7,6 +7,9 @@ Tamu scan QR → kamera HP terbuka → maks 10 jepretan per tamu → foto masuk 
 | `index.html` | Tamu | Isi nama, jepret, kirim. Kalau sinyal jelek, foto disimpan di HP dan dikirim ulang otomatis |
 | `album.html` | Kalian berdua | Login via link email, lihat semua foto, filter per tamu, hapus, unduh .zip |
 | `qr.html` | Kalian | Kartu QR siap cetak (4 per A4) + unduh PNG |
+| `filter.js` | — | Filter Noir (Tri-X pushed) dipakai di pratinjau tamu & album |
+
+**Filter & ukuran foto:** tamu melihat pratinjau Noir; yang tersimpan adalah foto asli berwarna, diperkecil ke maks 2048px JPEG 82% (~0,5–0,9 MB) supaya muat di storage gratis 1 GB. Di album ada pilihan *Noir / Warna asli* untuk tampilan, unduhan, dan .zip.
 
 ## Backend (Supabase project `wedding-khairunnisa-ajimas`, region Singapore)
 - Tabel `guests`, `photos`, `admins`; bucket privat `wedding-photos`
