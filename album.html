@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Jost:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 <style>
   .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 0 0 18px; }
   .stats { display: flex; gap: 22px; }
@@ -45,14 +45,33 @@
 
   <!-- Login -->
   <section id="login" class="card hidden" style="max-width:420px;margin:0 auto">
-    <p style="margin-top:0" class="center">Halaman ini khusus untuk kami berdua. Masuk dengan email yang terdaftar — link login akan dikirim ke email.</p>
+    <p style="margin-top:0" class="center">Halaman ini khusus untuk kami berdua.</p>
+    <p class="err center" id="link-err"></p>
     <form id="login-form">
       <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="email" required>
+      <input id="email" type="email" autocomplete="username" required>
+      <div style="height:12px"></div>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
       <p class="err" id="login-err"></p>
-      <button class="btn" id="login-btn" type="submit">Kirim link login</button>
+      <button class="btn" id="login-btn" type="submit">Masuk</button>
+      <div style="height:10px"></div>
+      <button class="btn ghost" id="link-btn" type="button">Belum punya password? Kirim link login ke email</button>
     </form>
-    <p class="muted center hidden" id="login-sent" style="margin-bottom:0">Cek email kamu dan buka link login dari perangkat ini.</p>
+    <p class="muted center hidden" id="login-sent" style="margin-bottom:0">Link login terkirim. Buka link itu <b>sekali saja</b> (di perangkat mana pun), lalu atur password di album supaya berikutnya tidak perlu email lagi.</p>
+  </section>
+
+  <!-- Atur password -->
+  <section id="pw" class="card hidden" style="max-width:420px;margin:0 auto 24px">
+    <form id="pw-form">
+      <label for="newpw">Password baru (min. 8 karakter)</label>
+      <input id="newpw" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="err" id="pw-err"></p>
+      <div style="display:flex;gap:8px">
+        <button class="btn ghost" id="pw-cancel" type="button">Batal</button>
+        <button class="btn" type="submit">Simpan password</button>
+      </div>
+    </form>
   </section>
 
   <!-- Bukan admin -->
@@ -72,6 +91,7 @@
         <select id="filter" aria-label="Filter tamu"><option value="">Semua tamu</option></select>
         <button class="btn small ghost" id="refresh" type="button">Muat ulang</button>
         <button class="btn small" id="zip" type="button">Unduh semua (.zip)</button>
+        <button class="btn small ghost" id="setpw" type="button">Atur password</button>
         <button class="btn small ghost" id="logout" type="button">Keluar</button>
       </div>
     </div>
@@ -108,7 +128,7 @@ let photos = [];   // { id, path, created_at, guest_id, name, url }
 let view = [];
 let idx = -1;
 
-function show(id) { for (const s of ["login", "denied", "album"]) $(s).classList.toggle("hidden", s !== id); }
+function show(id) { for (const s of ["login", "denied", "album"]) $(s).classList.toggle("hidden", s !== id); if (id !== "album") $("pw").classList.add("hidden"); }
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (d) => new Date(d).toLocaleString("id-ID", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" });
 
@@ -222,16 +242,55 @@ $("zip").onclick = async () => {
   btn.disabled = false; btn.textContent = "Unduh semua (.zip)";
 };
 
+function authMsg(err) {
+  const m = String(err && (err.message || err.code) || err || "");
+  if (/rate limit|over_email/i.test(m)) return "Terlalu sering minta link — batas email gratis sekitar 2 per jam. Coba lagi nanti, atau masuk dengan password.";
+  if (/Invalid login credentials/i.test(m)) return "Email atau password salah. Kalau belum pernah mengatur password, pakai tombol kirim link di bawah.";
+  if (/invalid/i.test(m) && /email/i.test(m)) return "Format email tidak valid.";
+  return m || "Terjadi kesalahan. Coba lagi.";
+}
+
+// Pesan error saat link email dibuka (mis. link sudah terpakai / kedaluwarsa)
+(() => {
+  const h = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
+  const code = h.get("error_code") || h.get("error");
+  if (!code) return;
+  $("link-err").textContent = /otp_expired|access_denied/.test(code)
+    ? "Link login ini sudah terpakai atau kedaluwarsa (tiap link hanya bisa dibuka sekali). Masuk dengan password, atau minta link baru."
+    : "Login gagal: " + (h.get("error_description") || code).replace(/\+/g, " ");
+  history.replaceState(null, "", location.pathname);
+})();
+
 $("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  $("login-btn").disabled = true; $("login-err").textContent = "";
-  const { error } = await sb.auth.signInWithOtp({
-    email: $("email").value.trim(),
-    options: { emailRedirectTo: location.origin + location.pathname },
-  });
+  const email = $("email").value.trim(), password = $("password").value;
+  $("login-err").textContent = "";
+  if (!password) { $("login-err").textContent = "Isi password, atau pakai tombol kirim link di bawah."; return; }
+  $("login-btn").disabled = true;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   $("login-btn").disabled = false;
-  if (error) { $("login-err").textContent = error.message; return; }
+  if (error) $("login-err").textContent = authMsg(error);
+});
+$("link-btn").addEventListener("click", async () => {
+  const email = $("email").value.trim();
+  $("login-err").textContent = "";
+  if (!$("email").checkValidity() || !email) { $("login-err").textContent = "Isi email yang benar dulu."; return; }
+  $("link-btn").disabled = true;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+  $("link-btn").disabled = false;
+  if (error) { $("login-err").textContent = authMsg(error); return; }
   $("login-form").classList.add("hidden"); $("login-sent").classList.remove("hidden");
+});
+
+$("setpw").onclick = () => { $("pw").classList.remove("hidden"); $("newpw").focus(); };
+$("pw-cancel").onclick = () => $("pw").classList.add("hidden");
+$("pw-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("pw-err").textContent = "";
+  const { error } = await sb.auth.updateUser({ password: $("newpw").value });
+  if (error) { $("pw-err").textContent = authMsg(error); return; }
+  $("newpw").value = ""; $("pw").classList.add("hidden");
+  alert("Password tersimpan. Sekarang kamu bisa masuk di HP/perangkat lain dengan email + password.");
 });
 async function logout() { await sb.auth.signOut(); show("login"); }
 $("logout").onclick = logout; $("logout2").onclick = logout;

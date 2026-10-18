@@ -53,7 +53,7 @@ h1.names .amp { color: var(--gold); font-style: italic; }
   padding: 22px;
 }
 label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-input[type=text], input[type=email] {
+input[type=text], input[type=email], input[type=password] {
   width: 100%; font: inherit; color: var(--ink); background: var(--bg);
   border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; outline: none;
 }
