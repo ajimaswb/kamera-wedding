@@ -78,14 +78,16 @@
 
     <p class="muted center" id="queue-msg" style="font-size:14px;margin:14px 0 0"></p>
     <div class="thumbs" id="thumbs"></div>
+    <button class="btn ghost hidden" id="finish" type="button" style="margin-top:22px">Selesai, cukup sekian</button>
   </section>
 
   <!-- Langkah 3: selesai -->
   <section id="step-done" class="card hidden center">
     <p class="done-title">Terima kasih! 🤍</p>
-    <p class="muted" style="margin:0">Semua 10 jepretanmu sudah kami terima dan akan jadi bagian dari album pernikahan kami.</p>
+    <p class="muted" style="margin:0" id="done-msg"></p>
     <p class="muted center" id="queue-msg-done" style="font-size:14px;margin:14px 0 0"></p>
     <div class="thumbs" id="thumbs-done"></div>
+    <button class="btn ghost hidden" id="resume" type="button" style="margin-top:22px">Lanjut memotret</button>
   </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -161,10 +163,20 @@ function render() {
   $("left-n").textContent = left;
   const q = queue.length;
   $("queue-msg").textContent = q ? `${q} foto menunggu terkirim — akan dikirim otomatis saat sinyal kembali` : "";
-  $("queue-msg-done").textContent = $("queue-msg").textContent;
+  $("queue-msg-done").textContent = q ? `${q} foto masih menunggu terkirim. Biarkan halaman ini terbuka sebentar sampai terkirim.` : "";
+  $("finish").classList.toggle("hidden", used() === 0);
+  $("resume").classList.toggle("hidden", left === 0);
+  $("done-msg").textContent = left === 0
+    ? `Semua ${C.maxPhotos} jepretanmu sudah kami terima dan akan jadi bagian dari album pernikahan kami.`
+    : `${used()} foto darimu sudah jadi bagian dari album pernikahan kami. Masih ada ${left} jepretan tersisa — scan QR yang sama kapan saja kalau ingin memotret lagi.`;
   renderThumbs();
-  if (left === 0) show("step-done"); else show("step-cam");
+  if (left === 0 || store.get("wg_done") === "1") show("step-done"); else show("step-cam");
 }
+
+$("finish").addEventListener("click", () => {
+  store.set("wg_done", "1"); render(); window.scrollTo({ top: 0, behavior: "smooth" });
+});
+$("resume").addEventListener("click", () => { store.set("wg_done", "0"); render(); });
 
 async function init() {
   if (!guestId) return show("step-name");
@@ -193,7 +205,7 @@ $("name-form").addEventListener("submit", async (e) => {
   $("name-btn").disabled = false;
   if (error) { $("name-err").textContent = "Gagal menyimpan. Cek koneksi internet lalu coba lagi."; return; }
   guestId = id; store.set("wg_id", id); store.set("wg_name", name); store.set("wg_sent", "0");
-  store.set("wg_thumbs", "[]");
+  store.set("wg_thumbs", "[]"); store.set("wg_done", "0");
   $("hello").textContent = name;
   sent = 0; render();
 });
