@@ -1,6 +1,6 @@
 # Kamera Tamu — Khairunnisa & Ajimas
 
-Tamu scan QR → kamera HP terbuka → maks 10 jepretan per tamu → foto masuk ke album privat kalian.
+Tamu scan QR → kamera HP terbuka → maks 5 jepretan per tamu → foto masuk ke album privat kalian.
 
 | Halaman | Untuk | Isi |
 |---|---|---|
@@ -13,7 +13,7 @@ Tamu scan QR → kamera HP terbuka → maks 10 jepretan per tamu → foto masuk 
 
 ## Backend (Supabase project `wedding-khairunnisa-ajimas`, region Singapore)
 - Tabel `guests`, `photos`, `admins`; bucket privat `wedding-photos`
-- Batas 10 foto dijaga di server (trigger + policy storage), bukan cuma di tampilan
+- Batas 5 foto dijaga di server (trigger + policy storage), bukan cuma di tampilan
 - Tamu tidak bisa melihat foto siapa pun; hanya email di tabel `admins` yang bisa membuka album
 
 ## Online-kan (sekali saja)

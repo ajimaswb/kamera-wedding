@@ -50,7 +50,7 @@
 
   <!-- Langkah 1: nama -->
   <section id="step-name" class="card hidden">
-    <p class="center" style="margin-top:0">Abadikan momen kami dari sudut pandangmu. Kamu punya <b>10 jepretan</b> — seperti kamera film. Pilih momen terbaik!</p>
+    <p class="center" style="margin-top:0">Abadikan momen kami dari sudut pandangmu. Kamu punya <b><span id="max-n">5</span> jepretan</b> — seperti kamera film. Pilih momen terbaik!</p>
     <form id="name-form">
       <label for="name">Nama kamu</label>
       <input id="name" type="text" maxlength="60" autocomplete="name" placeholder="cth. Budi & keluarga" required>
@@ -63,7 +63,7 @@
   <section id="step-cam" class="hidden">
     <p class="center muted" style="margin:0">Hai, <span id="hello"></span></p>
     <div class="film" id="film"></div>
-    <p class="left"><b id="left-n">10</b> jepretan tersisa</p>
+    <p class="left"><b id="left-n">5</b> jepretan tersisa</p>
 
     <input id="file" type="file" accept="image/*" capture="environment" class="hidden">
     <button class="shutter" id="shutter" type="button">Jepret</button>
@@ -93,7 +93,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js"></script>
+<script src="config.js?v=2"></script>
 <script src="filter.js?v=1"></script>
 <script>
 const C = window.WEDDING;
@@ -107,6 +107,7 @@ const store = {
 const [n1, n2] = C.couple.split("&").map(s => s.trim());
 $("names").innerHTML = `${n1} <span class="amp">&amp;</span> ${n2}`;
 $("date").textContent = C.date || "";
+$("max-n").textContent = C.maxPhotos;
 
 let guestId = store.get("wg_id");
 let sent = 0;          // foto yang sudah tercatat di server
@@ -273,7 +274,7 @@ async function flush() {
         queue = [];
         const { data } = await sb.rpc("guest_status", { gid: guestId });
         if (data) { sent = data.count; store.set("wg_sent", String(sent)); }
-        render(); toast("Jatah 10 jepretanmu sudah habis.");
+        render(); toast(`Jatah ${C.maxPhotos} jepretanmu sudah habis.`);
       } else {
         failed = true;
       }
